@@ -347,7 +347,7 @@ function test = test_defaults(t)
 	test.f_start = 20;
 	test.f_end = test.fs * 0.41667; % 20 kHz @ 48 kHz
 	test.fu = test.fs * 0.41667;    % 20 kHz @ 48 kHz
-	test.f_max = 0.999*t.fs/2;      % Measure up to min. Nyquist frequency
+	test.f_max = 0.999*test.fs/2;      % Measure up to min. Nyquist frequency
 	test.fs1 = test.fs;
 	test.fs2 = test.fs;
 
