@@ -17,8 +17,8 @@
 #include <ipc/stream.h>
 #include <kernel/tokens.h>
 
-#define SOF_DEV 1
-#define FUZZER_DEV 2
+#define TPLG_PARSER_SOF_DEV 1
+#define TPLG_PARSER_FUZZER_DEV 2
 
 #define MOVE_POINTER_BY_BYTES(p, b) ((typeof(p))((uint8_t *)(p) + (b)))
 
@@ -26,6 +26,8 @@ struct testbench_prm;
 struct snd_soc_tplg_vendor_array;
 struct snd_soc_tplg_ctl_hdr;
 struct sof_topology_token;
+struct sof;
+struct fuzz;
 
 struct comp_info {
 	char *name;
@@ -38,9 +40,6 @@ struct frame_types {
 	char *name;
 	enum sof_ipc_frame frame;
 };
-
-struct sof;
-struct fuzz;
 
 /*
  * Per topology data.
