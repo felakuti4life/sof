@@ -38,6 +38,8 @@
 #define FILE_READ 0
 #define FILE_WRITE 1
 
+#define MAX_TPLG_OBJECT_SIZE	4096
+
 #include <alsa/sound/uapi/asoc.h>
 
 static int plug_load_fileread(struct tplg_context *ctx,
@@ -184,7 +186,7 @@ static int load_fileread(struct tplg_context *ctx, struct plug_mq *ipc, struct p
 	if (ret < 0)
 		return ret;
 
-	if (tplg_create_controls(ctx->widget->num_kcontrols, file, NULL) < 0) {
+	if (tplg_create_controls(ctx->widget->num_kcontrols, file, NULL, 0) < 0) {
 		fprintf(stderr, "error: loading controls\n");
 		return -EINVAL;
 	}
@@ -230,7 +232,7 @@ static int load_filewrite(struct tplg_context *ctx, struct plug_mq *ipc, struct 
 	if (ret < 0)
 		return ret;
 
-	if (tplg_create_controls(ctx->widget->num_kcontrols, file, NULL) < 0) {
+	if (tplg_create_controls(ctx->widget->num_kcontrols, file, NULL, 0) < 0) {
 		fprintf(stderr, "error: loading controls\n");
 		return -EINVAL;
 	}
@@ -324,21 +326,24 @@ static int plug_ctl_init(struct tplg_context *ctx, struct plug_ctl *ctls,
 static int plug_new_pga_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 			    struct plug_ctl *ctl)
 {
-	struct sof_ipc_comp_volume volume = {0};
-	struct sof_ipc_comp_reply reply = {0};
+	char tplg_object[MAX_TPLG_OBJECT_SIZE] = {0};
+	struct sof_ipc_comp_volume *volume =
+		(struct sof_ipc_comp_volume *)tplg_object;
 	struct snd_soc_tplg_ctl_hdr *tplg_ctl;
+	struct sof_ipc_comp_reply reply = {0};
 	int ret;
 
 	tplg_ctl = calloc(ctx->hdr->payload_size, 1);
 	if (!tplg_ctl)
 		return -ENOMEM;
 
-	ret = tplg_new_pga(ctx, &volume, tplg_ctl);
+	ret = tplg_new_pga(ctx, &volume->comp, MAX_TPLG_OBJECT_SIZE,
+			tplg_ctl, ctx->hdr->payload_size);
 	if (ret < 0) {
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &volume, sizeof(volume),
+	ret = plug_ipc_cmd(ipc, &volume, volume->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -356,7 +361,9 @@ out:
 static int plug_new_mixer_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 			      struct plug_ctl *ctl)
 {
-	struct sof_ipc_comp_mixer mixer = {0};
+	char tplg_object[MAX_TPLG_OBJECT_SIZE] = {0};
+	struct sof_ipc_comp_mixer *mixer =
+		(struct sof_ipc_comp_mixer *)tplg_object;
 	struct sof_ipc_comp_reply reply = {0};
 	struct snd_soc_tplg_ctl_hdr *tplg_ctl;
 	int ret;
@@ -365,12 +372,13 @@ static int plug_new_mixer_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 	if (!tplg_ctl)
 		return -ENOMEM;
 
-	ret = tplg_new_mixer(ctx, &mixer, tplg_ctl);
+	ret = tplg_new_mixer(ctx, &mixer->comp, MAX_TPLG_OBJECT_SIZE,
+				tplg_ctl, ctx->hdr->payload_size);
 	if (ret < 0) {
 		fprintf(stderr, "error: failed to create mixer\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &mixer, sizeof(mixer),
+	ret = plug_ipc_cmd(ipc, &mixer, mixer->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -388,7 +396,9 @@ out:
 static int plug_new_src_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 			    struct plug_ctl *ctl)
 {
-	struct sof_ipc_comp_src src = {0};
+	char tplg_object[MAX_TPLG_OBJECT_SIZE] = {0};
+	struct sof_ipc_comp_src *src =
+		(struct sof_ipc_comp_src *)tplg_object;
 	struct sof_ipc_comp_reply reply = {0};
 	struct snd_soc_tplg_ctl_hdr *tplg_ctl;
 	int ret;
@@ -397,12 +407,13 @@ static int plug_new_src_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 	if (!tplg_ctl)
 		return -ENOMEM;
 
-	ret = tplg_new_src(ctx, &src, tplg_ctl);
+	ret = tplg_new_src(ctx, &src->comp, MAX_TPLG_OBJECT_SIZE,
+			tplg_ctl, ctx->hdr->payload_size);
 	if (ret < 0) {
 		fprintf(stderr, "error: failed to create src\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &src, sizeof(src),
+	ret = plug_ipc_cmd(ipc, &src, src->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -420,7 +431,9 @@ out:
 static int plug_new_asrc_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 			     struct plug_ctl *ctl)
 {
-	struct sof_ipc_comp_asrc asrc = {0};
+	char tplg_object[MAX_TPLG_OBJECT_SIZE] = {0};
+	struct sof_ipc_comp_asrc *asrc =
+		(struct sof_ipc_comp_asrc *)tplg_object;
 	struct sof_ipc_comp_reply reply = {0};
 	struct snd_soc_tplg_ctl_hdr *tplg_ctl;
 	int ret;
@@ -429,12 +442,13 @@ static int plug_new_asrc_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 	if (!tplg_ctl)
 		return -ENOMEM;
 
-	ret = tplg_new_asrc(ctx, &asrc, tplg_ctl);
+	ret = tplg_new_asrc(ctx, &asrc->comp, MAX_TPLG_OBJECT_SIZE,
+			tplg_ctl, ctx->hdr->payload_size);
 	if (ret < 0) {
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &asrc, sizeof(asrc),
+	ret = plug_ipc_cmd(ipc, &asrc, asrc->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -452,7 +466,9 @@ out:
 static int plug_new_process_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 				struct plug_ctl *ctl)
 {
-	struct sof_ipc_comp_process process = {0};
+	char tplg_object[MAX_TPLG_OBJECT_SIZE] = {0};
+	struct sof_ipc_comp_process *process =
+		(struct sof_ipc_comp_process *)tplg_object;
 	struct sof_ipc_comp_reply reply = {0};
 	struct snd_soc_tplg_ctl_hdr *tplg_ctl;
 	int ret;
@@ -461,12 +477,13 @@ static int plug_new_process_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 	if (!tplg_ctl)
 		return -ENOMEM;
 
-	ret = tplg_new_process(ctx, &process, tplg_ctl);
+	ret = tplg_new_process(ctx, &process->comp, MAX_TPLG_OBJECT_SIZE,
+			tplg_ctl, ctx->hdr->payload_size);
 	if (ret < 0) {
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc,  &process, sizeof(process),
+	ret = plug_ipc_cmd(ipc,  &process, process->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -681,7 +698,7 @@ int plug_load_widget(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_
 		}
 
 		printf("info: Widget type not supported %d\n", ctx->widget->id);
-		ret = tplg_create_controls(ctx->widget->num_kcontrols, ctx->file, NULL);
+		ret = tplg_create_controls(ctx->widget->num_kcontrols, ctx->file, NULL, 0);
 		if (ret < 0) {
 			fprintf(stderr, "error: loading controls\n");
 			goto exit;
