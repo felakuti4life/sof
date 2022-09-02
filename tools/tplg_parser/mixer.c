@@ -95,7 +95,7 @@ int tplg_create_mixer(struct tplg_context *ctx,
 	/* configure mixer */
 	mixer->comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
 	mixer->comp.id = comp_id;
-	mixer->comp.hdr.size = sizeof(struct sof_ipc_comp_src) + UUID_SIZE;
+	mixer->comp.hdr.size = sizeof(struct sof_ipc_comp_mixer) + UUID_SIZE;
 	mixer->comp.type = SOF_COMP_MIXER;
 	mixer->comp.pipeline_id = ctx->pipeline_id;
 	mixer->comp.ext_data_length = UUID_SIZE;
