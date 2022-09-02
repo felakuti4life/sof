@@ -343,7 +343,7 @@ static int plug_new_pga_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &volume, volume->comp.hdr.size,
+	ret = plug_ipc_cmd(ipc, volume, volume->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -379,6 +379,7 @@ static int plug_new_mixer_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		goto out;
 	}
 	ret = plug_ipc_cmd(ipc, &mixer, mixer->comp.hdr.size,
+	ret = plug_ipc_cmd(ipc, mixer, mixer->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -413,7 +414,7 @@ static int plug_new_src_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create src\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &src, src->comp.hdr.size,
+	ret = plug_ipc_cmd(ipc, src, src->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -448,7 +449,7 @@ static int plug_new_asrc_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &asrc, asrc->comp.hdr.size,
+	ret = plug_ipc_cmd(ipc, asrc, asrc->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
@@ -483,7 +484,7 @@ static int plug_new_process_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create PGA\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc,  &process, process->comp.hdr.size,
+	ret = plug_ipc_cmd(ipc, process, process->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
