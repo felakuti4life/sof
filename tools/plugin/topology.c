@@ -51,6 +51,7 @@ static int plug_load_fileread(struct tplg_context *ctx,
 	FILE *file = ctx->file;
 	int size = ctx->widget->priv.size;
 	int comp_id = ctx->comp_id;
+	char uuid[UUID_SIZE];
 	int ret;
 
 	/* allocate memory for vendor tuple array */
@@ -91,6 +92,17 @@ static int plug_load_fileread(struct tplg_context *ctx,
 			return -EINVAL;
 		}
 
+		/* parse uuid token */
+		ret = sof_parse_tokens(uuid, comp_ext_tokens,
+				       ARRAY_SIZE(comp_ext_tokens), array,
+				       array->size);
+		if (ret != 0) {
+			fprintf(stderr, "error: parse fileread uuid token %d\n", size);
+			free(array);
+			return -EINVAL;
+		}
+
+
 		total_array_size += array->size;
 	}
 
@@ -102,10 +114,13 @@ static int plug_load_fileread(struct tplg_context *ctx,
 
 	/* use fileread comp as scheduling comp */
 	fileread->comp.core = ctx->core_id;
-	fileread->comp.hdr.size = sizeof(struct sof_ipc_comp_file);
+	fileread->comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
+	fileread->comp.hdr.size = sizeof(struct sof_ipc_comp_file) + UUID_SIZE;
 	fileread->comp.type = SOF_COMP_FILEREAD;
 	fileread->comp.pipeline_id = ctx->pipeline_id;
+	fileread->comp.ext_data_length = UUID_SIZE;
 	fileread->config.hdr.size = sizeof(struct sof_ipc_comp_config);
+	memcpy(fileread + 1, &uuid, UUID_SIZE);
 
 	return 0;
 }
@@ -120,6 +135,7 @@ static int plug_load_filewrite(struct tplg_context *ctx,
 	FILE *file = ctx->file;
 	int size = ctx->widget->priv.size;
 	int comp_id = ctx->comp_id;
+	char uuid[UUID_SIZE];
 	int ret;
 
 	/* allocate memory for vendor tuple array */
@@ -155,6 +171,17 @@ static int plug_load_filewrite(struct tplg_context *ctx,
 			free(array);
 			return -EINVAL;
 		}
+
+		/* parse uuid token */
+		ret = sof_parse_tokens(uuid, comp_ext_tokens,
+				       ARRAY_SIZE(comp_ext_tokens), array,
+				       array->size);
+		if (ret != 0) {
+			fprintf(stderr, "error: parse mixer uuid token %d\n", size);
+			free(array);
+			return -EINVAL;
+		}
+
 		total_array_size += array->size;
 	}
 
@@ -164,10 +191,13 @@ static int plug_load_filewrite(struct tplg_context *ctx,
 	filewrite->comp.core = ctx->core_id;
 	filewrite->comp.id = comp_id;
 	filewrite->mode = FILE_WRITE;
-	filewrite->comp.hdr.size = sizeof(struct sof_ipc_comp_file);
+	filewrite->comp.hdr.cmd = SOF_IPC_GLB_TPLG_MSG | SOF_IPC_TPLG_COMP_NEW;
+	filewrite->comp.hdr.size = sizeof(struct sof_ipc_comp_file) + UUID_SIZE;
 	filewrite->comp.type = SOF_COMP_FILEWRITE;
 	filewrite->comp.pipeline_id = ctx->pipeline_id;
+	filewrite->comp.ext_data_length = UUID_SIZE;
 	filewrite->config.hdr.size = sizeof(struct sof_ipc_comp_config);
+	memcpy(filewrite + 1, &uuid, UUID_SIZE);
 
 	return 0;
 }
@@ -176,13 +206,15 @@ static int plug_load_filewrite(struct tplg_context *ctx,
 static int load_fileread(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_ctl *ctl, int dir)
 {
 	FILE *file = ctx->file;
-	struct sof_ipc_comp_file fileread = {0};
+	struct sof_ipc_comp_file *fileread;
 	struct sof_ipc_comp_reply reply = {0};
 	int ret;
 
-	//fileread.config.frame_fmt = find_format(tp->bits_in);
+	fileread = calloc(1, sizeof(struct sof_ipc_comp_file)  + UUID_SIZE);
+	if (!fileread)
+		return -ENOMEM;
 
-	ret = plug_load_fileread(ctx, &fileread);
+	ret = plug_load_fileread(ctx, fileread);
 	if (ret < 0)
 		return ret;
 
@@ -191,31 +223,25 @@ static int load_fileread(struct tplg_context *ctx, struct plug_mq *ipc, struct p
 		return -EINVAL;
 	}
 
-	/* configure fileread */
-//	fileread.fn = strdup(tp->input_file[tp->input_file_index]);
-//	if (tp->input_file_index == 0)
-//		tp->fr_id = ctx->comp_id;
-
 	/* use fileread comp as scheduling comp */
 	ctx->sched_id = ctx->comp_id;
-//	tp->input_file_index++;
 
 	/* Set format from testbench command line*/
-	fileread.rate = ctx->fs_in;
-	fileread.channels = ctx->channels_in;
-	fileread.frame_fmt = ctx->frame_fmt;
-	fileread.direction = dir;
+	fileread->rate = ctx->fs_in;
+	fileread->channels = ctx->channels_in;
+	fileread->frame_fmt = ctx->frame_fmt;
+	fileread->direction = dir;
 
 	/* Set type depending on direction */
-	fileread.comp.type = (dir == SOF_IPC_STREAM_PLAYBACK) ?
+	fileread->comp.type = (dir == SOF_IPC_STREAM_PLAYBACK) ?
 		SOF_COMP_HOST : SOF_COMP_DAI;
 
-	ret = plug_ipc_cmd(ipc, &fileread, sizeof(fileread), &reply, sizeof(reply));
+	ret = plug_ipc_cmd(ipc, fileread, fileread->comp.hdr.size, &reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
 	}
 
-	//free(fileread.fn);
+	free(fileread);
 	return ret;
 }
 
@@ -224,11 +250,15 @@ static int load_filewrite(struct tplg_context *ctx, struct plug_mq *ipc, struct 
 {
 	struct sof *sof = ctx->sof;
 	FILE *file = ctx->file;
-	struct sof_ipc_comp_file filewrite = {0};
+	struct sof_ipc_comp_file *filewrite;
 	struct sof_ipc_comp_reply reply = {0};
 	int ret;
 
-	ret = plug_load_filewrite(ctx, &filewrite);
+	filewrite = calloc(1, sizeof(struct sof_ipc_comp_file)  + UUID_SIZE);
+	if (!filewrite)
+		return -ENOMEM;
+
+	ret = plug_load_filewrite(ctx, filewrite);
 	if (ret < 0)
 		return ret;
 
@@ -237,34 +267,23 @@ static int load_filewrite(struct tplg_context *ctx, struct plug_mq *ipc, struct 
 		return -EINVAL;
 	}
 
-	/* configure filewrite (multiple output files are supported.) */
-//	if (!tp->output_file[tp->output_file_index]) {
-//		fprintf(stderr, "error: output[%d] file name is null\n",
-//			tp->output_file_index);
-//		return -EINVAL;
-//	}
-//	filewrite.fn = strdup(tp->output_file[tp->output_file_index]);
-//	if (tp->output_file_index == 0)
-//		tp->fw_id = ctx->comp_id;
-//	tp->output_file_index++;
-
 	/* Set format from testbench command line*/
-	filewrite.rate = ctx->fs_out;
-	filewrite.channels = ctx->channels_out;
-	filewrite.frame_fmt = ctx->frame_fmt;
-	filewrite.direction = dir;
+	filewrite->rate = ctx->fs_out;
+	filewrite->channels = ctx->channels_out;
+	filewrite->frame_fmt = ctx->frame_fmt;
+	filewrite->direction = dir;
 
 	/* Set type depending on direction */
-	filewrite.comp.type = (dir == SOF_IPC_STREAM_PLAYBACK) ?
+	filewrite->comp.type = (dir == SOF_IPC_STREAM_PLAYBACK) ?
 		SOF_COMP_DAI : SOF_COMP_HOST;
 
-	ret = plug_ipc_cmd(ipc, &filewrite, sizeof(filewrite),
+	ret = plug_ipc_cmd(ipc, filewrite, filewrite->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
 		SNDERR("error: can't connect\n");
 	}
 
-	//free(filewrite.fn);
+	free(filewrite);
 	return ret;
 }
 
@@ -378,7 +397,7 @@ static int plug_new_mixer_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create mixer\n");
 		goto out;
 	}
-	ret = plug_ipc_cmd(ipc, &mixer, mixer->comp.hdr.size,
+
 	ret = plug_ipc_cmd(ipc, mixer, mixer->comp.hdr.size,
 			&reply, sizeof(reply));
 	if (ret < 0) {
@@ -548,6 +567,7 @@ static int plug_new_buffer_ipc(struct tplg_context *ctx, struct plug_mq *ipc,
 		fprintf(stderr, "error: failed to create pipeline\n");
 		goto out;
 	}
+
 	ret = plug_ipc_cmd(ipc, &buffer, sizeof(buffer),
 			&reply, sizeof(reply));
 	if (ret < 0) {
@@ -617,6 +637,7 @@ int plug_load_widget(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_
 		}
 		break;
 	case SND_SOC_TPLG_DAPM_AIF_IN:
+		printf("%s %d\n", __func__, __LINE__);
 		if (plug_aif_in_out(ctx, ipc, ctl, SOF_IPC_STREAM_PLAYBACK) < 0) {
 			fprintf(stderr, "error: load AIF IN failed\n");
 			ret = -EINVAL;
@@ -624,6 +645,7 @@ int plug_load_widget(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_
 		}
 		break;
 	case SND_SOC_TPLG_DAPM_AIF_OUT:
+		printf("%s %d\n", __func__, __LINE__);
 		if (plug_aif_in_out(ctx, ipc, ctl, SOF_IPC_STREAM_CAPTURE) < 0) {
 			fprintf(stderr, "error: load AIF OUT failed\n");
 			ret = -EINVAL;
@@ -631,6 +653,7 @@ int plug_load_widget(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_
 		}
 		break;
 	case SND_SOC_TPLG_DAPM_DAI_IN:
+		printf("%s %d\n", __func__, __LINE__);
 		if (plug_dai_in_out(ctx, ipc, ctl, SOF_IPC_STREAM_PLAYBACK) < 0) {
 			fprintf(stderr, "error: load filewrite\n");
 			ret = -EINVAL;
@@ -638,6 +661,7 @@ int plug_load_widget(struct tplg_context *ctx, struct plug_mq *ipc, struct plug_
 		}
 		break;
 	case SND_SOC_TPLG_DAPM_DAI_OUT:
+		printf("%s %d\n", __func__, __LINE__);
 		if (plug_dai_in_out(ctx, ipc, ctl, SOF_IPC_STREAM_CAPTURE) < 0) {
 			fprintf(stderr, "error: load filewrite\n");
 			ret = -EINVAL;

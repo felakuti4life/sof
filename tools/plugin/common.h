@@ -12,7 +12,7 @@
 #include <alsa/asoundlib.h>
 
 #define IPC3_MAX_MSG_SIZE	384
-#define NAME_SIZE	128
+#define NAME_SIZE	256
 
 #define MAX_CTLS	256
 

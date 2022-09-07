@@ -26,13 +26,13 @@ target_include_directories(sof-pipe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_options(sof-pipe PRIVATE -DPIC -g -O3 -Wl,-EL -Wmissing-prototypes
   -Wimplicit-fallthrough -DCONFIG_LIBRARY -imacros${config_h})
   
- target_include_directories(sof-pipe PRIVATE ${sof_install_directory}/include)
+target_include_directories(sof-pipe PRIVATE ${sof_install_directory}/include)
 target_include_directories(sof-pipe PRIVATE ${parser_install_dir}/include)
   
-target_link_libraries(sof-pipe PRIVATE sof_library)
+target_link_libraries(sof-pipe PRIVATE -Wl,-whole-archive sof_library -Wl,-no-whole-archive)
 target_link_libraries(sof-pipe PRIVATE sof_parser_lib)
 target_link_libraries(sof-pipe PRIVATE pthread)
-target_link_libraries(sof-pipe PRIVATE  -lasound -ldl -lm -lasound)
+target_link_libraries(sof-pipe PRIVATE  -rdynamic -lasound -ldl -lm -lasound)
 
 
 # File SOF pipe module
@@ -55,16 +55,44 @@ install(CODE
 			WORKING_DIRECTORY /usr/lib/x86_64-linux-gnu/alsa-lib)"
 		COMPONENT sof_mod_file)
 
-target_link_options(sof_mod_file PRIVATE -Wl,--export-dynamic,--no-undefined)
-target_link_libraries(sof_mod_file PRIVATE sof_library)
-target_link_libraries(sof_mod_file PRIVATE sof_parser_lib)
-target_link_libraries(sof_mod_file PRIVATE pthread)
-target_link_libraries(sof_mod_file PRIVATE  -lasound -ldl -lm -lasound)
+target_link_options(sof_mod_file PRIVATE -Wl,--export-dynamic)
 
 target_include_directories(sof_mod_file PRIVATE ${sof_install_directory}/include)
 target_include_directories(sof_mod_file PRIVATE ${parser_install_dir}/include)
 
 set_target_properties(sof_mod_file
+	PROPERTIES
+	INSTALL_RPATH "${sof_install_directory}/alsa-lib"
+	INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+
+
+# ALSA SOF pipe module
+add_library(sof_mod_alsa MODULE
+	alsa.c
+)
+sof_append_relative_path_definitions(sof_mod_alsa)
+target_include_directories(sof_mod_alsa PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_compile_options(sof_mod_alsa PRIVATE -DPIC -g -O3 -Wl,-EL -Wmissing-prototypes
+  -Wimplicit-fallthrough -DCONFIG_LIBRARY -imacros${config_h})
+  
+install(TARGETS sof_mod_alsa 
+		DESTINATION /usr/lib/x86_64-linux-gnu/alsa-lib)
+
+# hacky - needs proper way to create UUID link to module.so
+install(CODE
+		"execute_process(COMMAND ln -s libsof_mod_file.so libsof-f599ca2c15ac11eda9695329b9cdfd2e.so
+			COMMAND_ECHO STDOUT
+			WORKING_DIRECTORY /usr/lib/x86_64-linux-gnu/alsa-lib)"
+		COMPONENT sof_mod_alsa)
+
+target_link_options(sof_mod_alsa PRIVATE -Wl,--export-dynamic)
+
+target_include_directories(sof_mod_alsa PRIVATE ${sof_install_directory}/include)
+target_include_directories(sof_mod_alsa PRIVATE ${parser_install_dir}/include)
+
+set_target_properties(sof_mod_alsa
 	PROPERTIES
 	INSTALL_RPATH "${sof_install_directory}/alsa-lib"
 	INSTALL_RPATH_USE_LINK_PATH TRUE

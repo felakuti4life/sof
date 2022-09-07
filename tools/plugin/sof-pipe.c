@@ -319,14 +319,36 @@ static int pipe_set_ipc_lowpri(struct sof_pipe *sp)
 
 static int pipe_ipc_message(struct sof_pipe *sp, void *mailbox)
 {
+	struct ipc *ipc = ipc_get();
 	int err = 0;
 
 	/* reply is copied back to mailbox */
 	pthread_mutex_lock(&sp->ipc_lock);
+	memcpy(ipc->comp_data, mailbox, IPC3_MAX_MSG_SIZE);
 	ipc_cmd(mailbox);
 	pthread_mutex_unlock(&sp->ipc_lock);
 
 	return err;
+}
+
+#define COMP_PREFIX	"/usr/lib/x86_64-linux-gnu/alsa-lib/libsof-"
+#define COMP_SUFFIX	".so"
+#define UUID_STR_SIZE	32
+
+static void pipe_comp_uuid(char *name, size_t size, struct sof_ipc_comp_ext *comp_ext)
+{
+	int i;
+
+	memset(name, 0, size);
+	sprintf(name, "%s", COMP_PREFIX);
+	name += strlen(COMP_PREFIX);
+
+	/* convert UUID char at a time */
+	for (i = 0; i < 16; i++) {
+		sprintf(name, "%2.2x", comp_ext->uuid[i]);
+		name += 2;
+	}
+	sprintf(name, "%s", COMP_SUFFIX);
 }
 
 static int pipe_register_comp(struct sof_pipe *sp, struct sof_ipc_comp *comp,
@@ -335,7 +357,6 @@ static int pipe_register_comp(struct sof_pipe *sp, struct sof_ipc_comp *comp,
 	char uuid_sofile[NAME_SIZE];
 	char *uuid;
 	int index;
-	void (*entry)(void);
 	int i;
 
 	/* determine module uuid */
@@ -351,39 +372,29 @@ static int pipe_register_comp(struct sof_pipe *sp, struct sof_ipc_comp *comp,
 		break;
 	}
 
+	/* TODO: try other paths */
+	pipe_comp_uuid(uuid_sofile, NAME_SIZE, comp_ext);
+	printf("module: %s\n", uuid_sofile);
+
 	/* check if module already loaded */
 	for (i = 0; i < sp->mod_idx; i++) {
-		if (!strncmp(sp->module[i].uuid, comp_ext->uuid, sizeof(*comp_ext->uuid)))
+		if (!memcmp(sp->module[i].uuid, comp_ext->uuid, sizeof(*comp_ext->uuid)))
 			return 0; /* module found and already loaded */
 	}
 
-	/* TODO: try other paths */
-	snprintf(uuid_sofile, sizeof(uuid_sofile), "libsof-%s.so", comp_ext->uuid);
-	printf("try to load module: %s\n", uuid_sofile);
-
 	/* not loaded, so load module */
-	sp->module[sp->mod_idx].handle = dlopen(uuid_sofile, RTLD_LAZY);
+	sp->module[sp->mod_idx].handle = dlopen(uuid_sofile, RTLD_NOW);
 	if (!sp->module[sp->mod_idx].handle) {
-		fprintf(stderr, "error: cant load module %s : %s\n",
-			uuid, dlerror());
+		fprintf(stderr, "error: cant load module: %s\n", dlerror());
 		return -errno;
 	}
-
-	/* find the module entry */
-	entry = dlsym(sp->module[sp->mod_idx].handle, "init");
-	if (!entry) {
-		fprintf(stderr, "error: cant get entry for module %s : %s\n",
-			uuid, dlerror());
-		return -errno;
-	}
-
-	/* register the module */
-	entry();
+	memcpy(sp->module[sp->mod_idx].uuid, comp_ext->uuid, sizeof(*comp_ext->uuid));
 	sp->mod_idx++;
 
 	return 0;
 }
 
+/* some components need loaded via UUID as shared objects */
 static int pipe_comp_new(struct sof_pipe *sp, struct sof_ipc_cmd_hdr *hdr)
 {
 	struct sof_ipc_comp *comp = (struct sof_ipc_comp *)hdr;
@@ -395,7 +406,8 @@ static int pipe_comp_new(struct sof_pipe *sp, struct sof_ipc_cmd_hdr *hdr)
 		return -EINVAL;
 	}
 
-	comp_ext = (struct sof_ipc_comp_ext *)(comp + 1);
+	/* comp ext is at the end of the IPC structure */
+	comp_ext = (struct sof_ipc_comp_ext *)(((char *)comp) + hdr->size - sizeof(struct sof_ipc_comp_ext));
 
 	ret = pipe_register_comp(sp, comp, comp_ext);
 	return 0;
@@ -414,13 +426,14 @@ static int pipe_sof_pcm_ipc_message(struct sof_pipe *sp, void *mailbox)
 	int err = 0;
 	uint32_t cmd = iCS(hdr->cmd);
 
+	/* pipeline has to perform some work prior to core */
 	switch (cmd) {
 	case SOF_IPC_TPLG_COMP_NEW:
 		return pipe_comp_new(sp, hdr);
 	case SOF_IPC_TPLG_COMP_FREE:
 		return pipe_comp_free(sp, hdr);
 	default:
-		/* handled by SOF core */
+		/* handled directly by SOF core */
 		return 1;
 	}
 }
@@ -459,15 +472,16 @@ static void *pipe_ipc_pcm_thread(void *arg)
 		}
 
 		/* do the message work */
-		printf("got IPC %ld bytes from PCM: %s\n", ipc_size, mailbox);
-		pipe_ipc_dump(mailbox, IPC3_MAX_MSG_SIZE);
+		//printf("IPC-PCM: got %ld bytes\n", ipc_size);
+		//pipe_ipc_dump(mailbox, IPC3_MAX_MSG_SIZE);
 		if (sp->dead)
 			break;
 
+		/* some IPCs require pipe to perform actions before core */
 		if (pipe_sof_pcm_ipc_message(sp, mailbox))
 			pipe_ipc_message(sp, mailbox);
 
-		/* now return message completion status */
+		/* now return message completion status found in mailbox */
 		err = mq_send(sp->pcm_ipc.mq, mailbox, IPC3_MAX_MSG_SIZE, 0);
 		if (err < 0) {
 			fprintf(sp->log, "error: can't send PCM IPC message queue %s : %s\n",
@@ -514,7 +528,7 @@ static void *pipe_ipc_ctl_thread(void *arg)
 		}
 
 		/* do the message work */
-		printf("got IPC %ld bytes from CTL: %s\n", ipc_size, mailbox);
+		printf("IPC-CTL: got %ld bytes\n", ipc_size);
 		if (sp->dead)
 			break;
 		pipe_ipc_message(sp, mailbox);
@@ -658,7 +672,6 @@ static int pipe_sof_setup(struct sof *sof)
 	struct ll_schedule_domain domain = {0};
 
 	/* register modules */
-
 
 	domain.next_tick = 0;
 
