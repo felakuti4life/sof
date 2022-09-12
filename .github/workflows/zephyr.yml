@@ -21,7 +21,7 @@ jobs:
           tgl tgl-h,
           imx8 imx8x imx8m,
           # only tgl has IPC4 overlay file now
-          -i IPC4 tgl,
+          -i IPC4 tgl, mtl
         ]
         zephyr_revision: [
           manifest_revision,
