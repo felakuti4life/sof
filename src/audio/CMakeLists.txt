@@ -86,6 +86,10 @@ if(NOT CONFIG_LIBRARY)
 		add_local_sources(sof
 		  google_rtc_audio_processing_mock.c
 		  )
+      elseif(CONFIG_COMP_WEBRTC_AUDIO_PROCESSING)
+        message(INFO "Building WebRTC components...")
+        add_subdirectory(webrtc)
+
 	  else()
 		message(INFO "Link with google_rtc_audio_processing")
 		target_link_directories(sof PRIVATE ${CMAKE_SOURCE_DIR}/third_party/lib)

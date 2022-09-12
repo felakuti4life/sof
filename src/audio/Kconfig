@@ -199,6 +199,17 @@ config COMP_GOOGLE_RTC_AUDIO_PROCESSING
 	  This component takes raw microphones input and playback reference
 	  and outputs an echo-free microphone signal.
 
+config COMP_WEBRTC_AUDIO_PROCESSING
+	bool "WebRTC Echo Cancellation"
+	select COMP_BLOB
+	default n
+	depends on COMP_GOOGLE_RTC_AUDIO_PROCESSING
+	help
+	  Select this to add an acoustic echo cancellation component.
+	  For convenience, it uses the existing Google RTC Audio Processing
+	  component.
+
+
 config GOOGLE_RTC_AUDIO_PROCESSING_MOCK
 	bool "Google Real Time Communication Audio processing mock"
 	default n

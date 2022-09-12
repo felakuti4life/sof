@@ -36,7 +36,7 @@ DAI_CONFIG(ACPSP, 0, 0, acp-headset-codec,
                 ACP_TDM(2, 32, 3, 3),ACPSP_CONFIG_DATA(ACPSP, 0, 48000, 2)))
 
 # Capture pipeline 2 on PCM 0 using max 2 channels of s16le.
-PIPELINE_PCM_ADD(sof/pipe-passthrough-capture.m4,
+PIPELINE_PCM_ADD(sof/pipe-google-rtc-audio-processing-capture.m4,
         2, 0, 2, s16le,
         2000, 0, 0,
         48000, 48000, 48000)
